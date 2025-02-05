@@ -4,7 +4,8 @@
 	"description": "",
 	"main": "index.js",
 	"scripts": {
-		"start": "node server.js"
+		"start": "node server.js",
+		"postinstall": "npm rebuild bcrypt --build-from-source"
 	},
 	"keywords": [],
 	"author": "",
@@ -15,7 +16,7 @@
 		"crypto": "^1.0.1",
 		"dotenv": "^16.4.7",
 		"express": "^4.21.2",
-		"jsonwebtoken": "^9.0.2", 
+		"jsonwebtoken": "^9.0.2",
 		"mongoose": "^8.9.2",
 		"multer": "^1.4.5-lts.1",
 		"nodemon": "^3.1.9",
