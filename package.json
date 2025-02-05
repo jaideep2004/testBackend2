@@ -4,9 +4,13 @@
 	"description": "",
 	"main": "index.js",
 	"scripts": {
-		"start": "node server.js",
-		"postinstall": "npm rebuild bcrypt --build-from-source"
+		"start": "node server.js"
+		
 	},
+	"bcrypt": {
+		"platform": "linux",
+		"arch": "x64"
+	  },
 	"keywords": [],
 	"author": "",
 	"license": "ISC",
