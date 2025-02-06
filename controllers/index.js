@@ -1,4 +1,5 @@
 // controllers/index.js
+const dotenv = require("dotenv");
 const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 const Razorpay = require("razorpay");
@@ -11,8 +12,13 @@ const {
 	Project,
 	Semester,
 } = require("../models");
+
+dotenv.config();
 const path = require("path");
 const fs = require("fs");
+const { OAuth2Client } = require("google-auth-library");
+
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const razorpay = new Razorpay({
 	key_id: process.env.RAZORPAY_KEY_ID,
@@ -126,6 +132,51 @@ const authController = {
 			res
 				.status(500)
 				.json({ message: "Error fetching user data", error: error.message });
+		}
+	},
+
+	googleAuth: async (req, res) => {
+		try {
+			const { credential } = req.body;
+
+			// Verify Google token
+			const ticket = await client.verifyIdToken({
+				idToken: credential,
+				audience: process.env.GOOGLE_CLIENT_ID,
+			});
+
+			const payload = ticket.getPayload();
+
+			// Check if user exists
+			let user = await User.findOne({ email: payload.email });
+
+			if (!user) {
+				// Create new user if doesn't exist
+				user = await User.create({
+					name: payload.name,
+					email: payload.email,
+					password: Math.random().toString(36).slice(-8), // Random password
+					googleId: payload.sub,
+					isVerified: true,
+				});
+			}
+
+			// Generate JWT token
+			const token = authController.generateToken(user._id, user.isAdmin);
+
+			res.json({
+				_id: user._id,
+				name: user.name,
+				email: user.email,
+				isAdmin: user.isAdmin,
+				token,
+				redirectUrl: "/customer/dashboard",
+			});
+		} catch (error) {
+			res.status(500).json({
+				message: "Google authentication failed",
+				error: error.message,
+			});
 		}
 	},
 };
@@ -307,11 +358,45 @@ const contentController = {
 		}
 	},
 
+	// previewContent: async (req, res) => {
+	// 	try {
+	// 		const content = await Content.findById(req.params.id);
+	// 		if (!content) {
+	// 			return res.status(404).json({ message: "Content not found" });
+	// 		}
+
+	// 		const normalizedPath = content.fileUrl.replace(/\\/g, "/");
+	// 		const filePath = path.join(__dirname, "..", normalizedPath);
+
+	// 		// Additional debugging
+	// 		console.log("Content ID:", req.params.id);
+	// 		console.log("File Path:", filePath);
+	// 		console.log("File Exists:", fs.existsSync(filePath));
+
+	// 		if (!fs.existsSync(filePath)) {
+	// 			return res.status(404).json({ message: "File not found" });
+	// 		}
+
+	// 		// Existing security and file serving logic...
+	// 	} catch (error) {
+	// 		console.error("Preview error:", error);
+	// 		res.status(500).json({
+	// 			message: "Error previewing content",
+	// 			error: error.message,
+	// 		});
+	// 	}
+	// },
 	previewContent: async (req, res) => {
 		try {
 			const content = await Content.findById(req.params.id);
 			if (!content) {
 				return res.status(404).json({ message: "Content not found" });
+			}
+
+			// Check if content is free or purchased
+			const hasPurchased = req.user.purchasedContent.includes(content._id);
+			if (!content.isFree && !hasPurchased) {
+				return res.status(403).json({ message: "Content not purchased" });
 			}
 
 			const normalizedPath = content.fileUrl.replace(/\\/g, "/");
@@ -321,45 +406,66 @@ const contentController = {
 				return res.status(404).json({ message: "File not found" });
 			}
 
-			// Add security headers
-			res.setHeader(
-				"Content-Security-Policy",
-				"default-src 'self'; script-src 'none'; object-src 'none';"
-			);
-			res.setHeader("X-Content-Type-Options", "nosniff");
-			res.setHeader("X-Frame-Options", "SAMEORIGIN");
-			res.setHeader(
-				"Cache-Control",
-				"no-store, no-cache, must-revalidate, private"
-			);
-			res.setHeader("Pragma", "no-cache");
-			res.setHeader("Expires", "0");
+			// Map content types to MIME types
+			const mimeTypes = {
+				"Video Lectures": "video/mp4",
+				"PDF Notes": "application/pdf",
+				"Previous Year": "application/pdf",
+				"Question Paper": "application/pdf",
+				Notes: "application/pdf",
+				Documents: "application/pdf",
+				default: "application/octet-stream",
+			};
 
-			// Set content type and disposition
-			const ext = path.extname(filePath).toLowerCase();
-			const contentType = content.type.toLowerCase();
+			// Get file extension and determine content type
+			const fileExtension = path.extname(filePath).toLowerCase();
+			const contentType = mimeTypes[content.type] || mimeTypes.default;
 
-			let mimeType = "application/octet-stream";
-			if (
-				ext === ".pdf" ||
-				["previous year", "question paper", "notes"].includes(contentType)
-			) {
-				mimeType = "application/pdf";
-			} else if (ext === ".mp4" || contentType.includes("video")) {
-				mimeType = "video/mp4";
+			// Set response headers
+			res.setHeader("Content-Type", contentType);
+			res.setHeader(
+				"Content-Disposition",
+				`inline; filename="${content.title}${fileExtension}"`
+			);
+
+			// Enable partial content support for video streaming
+			if (contentType.startsWith("video/")) {
+				const stat = fs.statSync(filePath);
+				const fileSize = stat.size;
+				const range = req.headers.range;
+
+				if (range) {
+					const parts = range.replace(/bytes=/, "").split("-");
+					const start = parseInt(parts[0], 10);
+					const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+					const chunksize = end - start + 1;
+					const file = fs.createReadStream(filePath, { start, end });
+
+					res.writeHead(206, {
+						"Content-Range": `bytes ${start}-${end}/${fileSize}`,
+						"Accept-Ranges": "bytes",
+						"Content-Length": chunksize,
+						"Content-Type": contentType,
+					});
+
+					file.pipe(res);
+				} else {
+					res.writeHead(200, {
+						"Content-Length": fileSize,
+						"Content-Type": contentType,
+					});
+					fs.createReadStream(filePath).pipe(res);
+				}
+			} else {
+				// For non-video content, stream the file directly
+				fs.createReadStream(filePath).pipe(res);
 			}
-
-			res.setHeader("Content-Type", mimeType);
-			res.setHeader("Content-Disposition", 'inline; filename="preview"');
-
-			// Stream the file
-			const fileStream = fs.createReadStream(filePath);
-			fileStream.pipe(res);
 		} catch (error) {
 			console.error("Preview error:", error);
-			res
-				.status(500)
-				.json({ message: "Error previewing content", error: error.message });
+			res.status(500).json({
+				message: "Error previewing content",
+				error: error.message,
+			});
 		}
 	},
 };

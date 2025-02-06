@@ -24,11 +24,11 @@ const protect = async (req, res, next) => {
 		req.user = user;
 		next();
 	} catch (error) {
-        if (error.name === 'TokenExpiredError') {
-            return res.status(401).json({ message: "Token expired" });
-        }
-        res.status(401).json({ message: "Not authorized" });
-    }
+		if (error.name === "TokenExpiredError") {
+			return res.status(401).json({ message: "Token expired" });
+		}
+		res.status(401).json({ message: "Not authorized" });
+	}
 };
 
 const admin = (req, res, next) => {
