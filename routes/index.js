@@ -23,7 +23,7 @@ router.post("/auth/login", authController.login);
 router.post("/auth/admin/login", authController.adminLogin);
 
 router.get("/auth/me", protect, authController.getMe);
-
+router.post("/auth/google", authController.googleAuth);
 // Content Routes
 router.get("/content", contentController.getContents);
 
@@ -88,9 +88,24 @@ router.post(
 router.get("/admin/classes", adminController.getClasses);
 
 // Add these routes
-router.delete("/admin/classes/:id", protect, admin, adminController.deleteClass);
-router.delete("/admin/semesters/:id", protect, admin, adminController.deleteSemester);
-router.delete("/admin/subjects/:id", protect, admin, adminController.deleteSubject);
+router.delete(
+	"/admin/classes/:id",
+	protect,
+	admin,
+	adminController.deleteClass
+);
+router.delete(
+	"/admin/semesters/:id",
+	protect,
+	admin,
+	adminController.deleteSemester
+);
+router.delete(
+	"/admin/subjects/:id",
+	protect,
+	admin,
+	adminController.deleteSubject
+);
 // Subject routes
 router.post(
 	"/admin/subjects",
