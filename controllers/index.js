@@ -358,34 +358,6 @@ const contentController = {
 		}
 	},
 
-	// previewContent: async (req, res) => {
-	// 	try {
-	// 		const content = await Content.findById(req.params.id);
-	// 		if (!content) {
-	// 			return res.status(404).json({ message: "Content not found" });
-	// 		}
-
-	// 		const normalizedPath = content.fileUrl.replace(/\\/g, "/");
-	// 		const filePath = path.join(__dirname, "..", normalizedPath);
-
-	// 		// Additional debugging
-	// 		console.log("Content ID:", req.params.id);
-	// 		console.log("File Path:", filePath);
-	// 		console.log("File Exists:", fs.existsSync(filePath));
-
-	// 		if (!fs.existsSync(filePath)) {
-	// 			return res.status(404).json({ message: "File not found" });
-	// 		}
-
-	// 		// Existing security and file serving logic...
-	// 	} catch (error) {
-	// 		console.error("Preview error:", error);
-	// 		res.status(500).json({
-	// 			message: "Error previewing content",
-	// 			error: error.message,
-	// 		});
-	// 	}
-	// },
 	previewContent: async (req, res) => {
 		try {
 			const content = await Content.findById(req.params.id);
