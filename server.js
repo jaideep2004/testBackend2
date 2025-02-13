@@ -23,7 +23,7 @@ app.use((req, res, next) => {
 });  
 // Serve uploaded files
 app.get("/", (req, res) => {
-	res.send("TEST BACKEND updated");
+	res.send("TEST BACKEND 13 feb");
 });
 app.use(
 	"/uploads",

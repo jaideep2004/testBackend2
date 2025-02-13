@@ -365,79 +365,82 @@ const contentController = {
 				return res.status(404).json({ message: "Content not found" });
 			}
 
-			// Check if content is free or purchased
-			const hasPurchased = req.user.purchasedContent.includes(content._id);
-			if (!content.isFree && !hasPurchased) {
+			// Get the file path
+			const filePath = path.join(__dirname, "..", content.fileUrl);
+
+			// Check if file exists
+			if (!fs.existsSync(filePath)) {
+				return res.status(404).json({ message: "File not found" });
+			}
+
+			// Get file extension
+			const ext = path.extname(filePath).toLowerCase();
+
+			// Set appropriate content type
+			const contentTypes = {
+				".pdf": "application/pdf",
+				".mp4": "video/mp4",
+				".jpg": "image/jpeg",
+				".jpeg": "image/jpeg",
+				".png": "image/png",
+			};
+
+			const contentType = contentTypes[ext] || "application/octet-stream";
+			res.setHeader("Content-Type", contentType);
+
+			// For security, prevent caching of preview content
+			res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+			res.setHeader("Pragma", "no-cache");
+			res.setHeader("Expires", "0");
+
+			// Stream the file
+			const stream = fs.createReadStream(filePath);
+			stream.pipe(res);
+		} catch (error) {
+			console.error("Preview error:", error);
+			res.status(500).json({ message: "Error previewing content" });
+		}
+	},
+
+	downloadContent: async (req, res) => {
+		try {
+			const content = await Content.findById(req.params.id);
+			if (!content) {
+				return res.status(404).json({ message: "Content not found" });
+			}
+
+			// Get user and verify purchase
+			const user = await User.findById(req.user._id);
+			const isPurchased =
+				content.isFree ||
+				user.purchasedContent.some(
+					(id) => id.toString() === content._id.toString()
+				);
+
+			if (!isPurchased) {
 				return res.status(403).json({ message: "Content not purchased" });
 			}
 
-			const normalizedPath = content.fileUrl.replace(/\\/g, "/");
-			const filePath = path.join(__dirname, "..", normalizedPath);
+			const filePath = path.join(__dirname, "..", content.fileUrl);
 
 			if (!fs.existsSync(filePath)) {
 				return res.status(404).json({ message: "File not found" });
 			}
 
-			// Map content types to MIME types
-			const mimeTypes = {
-				"Video Lectures": "video/mp4",
-				"PDF Notes": "application/pdf",
-				"Previous Year": "application/pdf",
-				"Question Paper": "application/pdf",
-				Notes: "application/pdf",
-				Documents: "application/pdf",
-				default: "application/octet-stream",
-			};
-
-			// Get file extension and determine content type
-			const fileExtension = path.extname(filePath).toLowerCase();
-			const contentType = mimeTypes[content.type] || mimeTypes.default;
-
-			// Set response headers
-			res.setHeader("Content-Type", contentType);
+			// Set download headers
+			const filename = path.basename(content.fileUrl);
 			res.setHeader(
 				"Content-Disposition",
-				`inline; filename="${content.title}${fileExtension}"`
+				`attachment; filename="${filename}"`
 			);
+			res.setHeader("Content-Type", "application/octet-stream");
 
-			// Enable partial content support for video streaming
-			if (contentType.startsWith("video/")) {
-				const stat = fs.statSync(filePath);
-				const fileSize = stat.size;
-				const range = req.headers.range;
-
-				if (range) {
-					const parts = range.replace(/bytes=/, "").split("-");
-					const start = parseInt(parts[0], 10);
-					const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-					const chunksize = end - start + 1;
-					const file = fs.createReadStream(filePath, { start, end });
-
-					res.writeHead(206, {
-						"Content-Range": `bytes ${start}-${end}/${fileSize}`,
-						"Accept-Ranges": "bytes",
-						"Content-Length": chunksize,
-						"Content-Type": contentType,
-					});
-
-					file.pipe(res);
-				} else {
-					res.writeHead(200, {
-						"Content-Length": fileSize,
-						"Content-Type": contentType,
-					});
-					fs.createReadStream(filePath).pipe(res);
-				}
-			} else {
-				// For non-video content, stream the file directly
-				fs.createReadStream(filePath).pipe(res);
-			}
+			// Stream the file
+			const stream = fs.createReadStream(filePath);
+			stream.pipe(res);
 		} catch (error) {
-			console.error("Preview error:", error);
-			res.status(500).json({
-				message: "Error previewing content",
-				error: error.message,
-			});
+			console.error("Download error:", error);
+			res.status(500).json({ message: "Error downloading content" });
 		}
 	},
 };
@@ -486,6 +489,15 @@ const customerController = {
 				.sort("-createdAt")
 				.limit(5);
 
+			const freeProjects = await Project.find({
+				// _id: { $nin: req.user.purchasedProjects },
+				isFree: true,
+			})
+				.populate("subjectId", "name")
+				.populate("classId", "name")
+				.sort("-createdAt")
+				.limit(5);
+
 			console.log("Recommended Projects Query:", {
 				purchasedProjects: req.user.purchasedProjects,
 				count: await Project.countDocuments({ isFree: false }),
@@ -516,70 +528,11 @@ const customerController = {
 				recommendedProjects,
 				freeContent,
 				popularContent,
+				freeProjects,
 			});
 		} catch (error) {
 			res.status(500).json({
 				message: "Error fetching dashboard data",
-				error: error.message,
-			});
-		}
-	},
-
-	downloadContent: async (req, res) => {
-		try {
-			const content = await Content.findById(req.params.id);
-			if (!content) {
-				return res.status(404).json({ message: "Content not found" });
-			}
-
-			const hasPurchased = req.user.purchasedContent.includes(content._id);
-			if (!content.isFree && !hasPurchased) {
-				return res.status(403).json({ message: "Content not purchased" });
-			}
-
-			// Map content types to MIME types
-			const mimeTypes = {
-				"Video Lectures": "video/mp4",
-				"PDF Notes": "application/pdf",
-				Documents: "application/pdf",
-				// Add more mappings as needed
-			};
-
-			// Get the MIME type based on content type
-			const contentType = mimeTypes[content.type];
-			if (!contentType) {
-				return res.status(400).json({ message: "Unsupported content type" });
-			}
-
-			// Get file extension from the original file
-			const fileExtension = path.extname(content.fileUrl);
-
-			// Construct the full file path (adjust the base path according to your server setup)
-			const fullPath = path.join(__dirname, "..", content.fileUrl);
-
-			// Check if file exists
-			if (!fs.existsSync(fullPath)) {
-				return res.status(404).json({ message: "File not found" });
-			}
-
-			// Update download count
-			content.downloads += 1;
-			await content.save();
-
-			// Set headers for file download
-			res.setHeader("Content-Type", contentType);
-			res.setHeader(
-				"Content-Disposition",
-				`attachment; filename="${content.title}${fileExtension}"`
-			);
-
-			// Stream the file
-			const fileStream = fs.createReadStream(fullPath);
-			fileStream.pipe(res);
-		} catch (error) {
-			console.error("Download error:", error);
-			res.status(500).json({
-				message: "Error downloading content",
 				error: error.message,
 			});
 		}
@@ -1268,40 +1221,82 @@ const projectController = {
 				return res.status(404).json({ message: "Project not found" });
 			}
 
-			const hasPurchased = req.user.purchasedProjects?.includes(project._id);
-			if (!project.isFree && !hasPurchased) {
+			// Verify purchase
+			const user = await User.findById(req.user._id);
+			const isPurchased =
+				project.isFree ||
+				user.purchasedProjects.some(
+					(id) => id.toString() === project._id.toString()
+				);
+
+			if (!isPurchased) {
 				return res.status(403).json({ message: "Project not purchased" });
 			}
 
-			// Get file extension from the original file
-			const fileExtension = path.extname(project.fileUrl);
+			const filePath = path.join(__dirname, "..", project.fileUrl);
 
-			// Construct the full file path
-			const fullPath = path.join(__dirname, "..", project.fileUrl);
-
-			// Check if file exists
-			if (!fs.existsSync(fullPath)) {
+			if (!fs.existsSync(filePath)) {
 				return res.status(404).json({ message: "File not found" });
 			}
 
-			// Update download count
-			project.downloads += 1;
-			await project.save();
-
-			// Set headers for file download
-			res.setHeader("Content-Type", "application/zip");
+			// Set download headers
+			const filename = path.basename(project.fileUrl);
 			res.setHeader(
 				"Content-Disposition",
-				`attachment; filename="${project.title}${fileExtension}"`
+				`attachment; filename="${filename}"`
 			);
+			res.setHeader("Content-Type", "application/octet-stream");
 
 			// Stream the file
-			const fileStream = fs.createReadStream(fullPath);
-			fileStream.pipe(res);
+			const stream = fs.createReadStream(filePath);
+			stream.pipe(res);
 		} catch (error) {
-			console.error("Download error:", error);
+			console.error("Project download error:", error);
+			res.status(500).json({ message: "Error downloading project" });
+		}
+	},
+	deleteProject: async (req, res) => {
+		try {
+			const project = await Project.findById(req.params.id);
+
+			if (!project) {
+				return res.status(404).json({
+					success: false,
+					message: "Project not found",
+				});
+			}
+
+			// Delete associated files if they exist
+			const filesToDelete = [
+				project.fileUrl, // Main project file
+				project.thumbnailUrl, // Thumbnail image
+			].filter(Boolean); // Remove any null/undefined values
+
+			// Delete files from storage
+			for (const filePath of filesToDelete) {
+				const fullPath = path.join(__dirname, "..", filePath);
+				if (fs.existsSync(fullPath)) {
+					try {
+						fs.unlinkSync(fullPath);
+					} catch (err) {
+						console.error(`Error deleting file ${fullPath}:`, err);
+						// Continue with deletion even if file removal fails
+					}
+				}
+			}
+
+			// Delete project from database
+			await Project.findByIdAndDelete(req.params.id);
+
+			res.status(200).json({
+				success: true,
+				message: "Project deleted successfully",
+			});
+		} catch (error) {
+			console.error("Project deletion error:", error);
 			res.status(500).json({
-				message: "Error downloading project",
+				success: false,
+				message: "Error deleting project",
 				error: error.message,
 			});
 		}
