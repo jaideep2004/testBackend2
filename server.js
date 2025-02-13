@@ -142,18 +142,8 @@ app.use((req, res) => {
 });
 
 const options = {
-	key: fs.readFileSync(
-		path.join(
-			__dirname,
-			"/etc/letsencrypt/live/195-35-45-82.sslip.io/privkey.pem"
-		)
-	),
-	cert: fs.readFileSync(
-		path.join(
-			__dirname,
-			"/etc/letsencrypt/live/195-35-45-82.sslip.io/fullchain.pem"
-		)
-	),
+	key: fs.readFileSync(path.join(__dirname, "certs/privkey.pem")),
+	cert: fs.readFileSync(path.join(__dirname, "certs/fullchain.pem")),
 };
 
 const PORT = process.env.PORT || 5000;
