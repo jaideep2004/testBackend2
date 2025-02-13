@@ -30,44 +30,6 @@ router.get("/content", contentController.getContents);
 // Customer Routes
 router.get("/customer/dashboard", protect, customerController.getDashboardData);
 
-router.get("/customer/download/:id", protect, async (req, res) => {
-	try {
-		const content = await Content.findById(req.params.id);
-		if (!content) {
-			return res.status(404).json({ message: "Content not found" });
-		}
-
-		// Get user
-		const user = await User.findById(req.user._id);
-
-		// Check if content is free or purchased
-		const isPurchased =
-			content.isFree ||
-			user.purchasedContent.some(
-				(itemId) => itemId.toString() === content._id.toString()
-			);
-
-		if (!isPurchased) {
-			return res.status(403).json({ message: "Content not purchased" });
-		}
-
-		// Get the file path
-		const filePath = path.join(__dirname, "..", content.fileUrl);
-
-		// Set appropriate headers
-		const filename = path.basename(content.fileUrl);
-		res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
-
-		// Send file
-		res.sendFile(filePath);
-	} catch (error) {
-		console.error("Download error:", error);
-		res.status(500).json({ message: "Server error" });
-	}
-});
-
-// router.get("/content/preview/:id", protect, contentController.previewContent);
-router.get("/customer/preview/:id", protect, contentController.previewContent);
 // Payment Routes
 router.post("/payment/create-order", protect, paymentController.createOrder);
 router.post(
@@ -157,10 +119,18 @@ router.post(
 
 router.get("/projects", projectController.getProjects);
 router.get("/projects/:id", projectController.getProjectById);
+
+router.get("/customer/preview/:id", contentController.previewContent);
+router.get(
+	"/customer/download/:id",
+	protect,
+	contentController.downloadContent
+);
 router.get(
 	"/projects/download/:id",
 	protect,
 	projectController.downloadProject
 );
+router.delete("/projects/:id", protect, admin, projectController.deleteProject);
 
 module.exports = router;
