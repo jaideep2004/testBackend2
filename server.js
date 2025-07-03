@@ -17,7 +17,7 @@ connectDB();
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:5173', 'https://drive.google.com'],
+  origin: ['http://localhost:5173', 'https://drive.google.com','https://academicassignmentmaster.co.in'],
   credentials: true,
   exposedHeaders: ['Content-Disposition']
 }));
