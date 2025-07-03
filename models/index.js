@@ -183,6 +183,12 @@ const contentSchema = new mongoose.Schema(
 			type: String,
 			required: true,
 		},
+		fileId: {
+			type: String, // Google Drive file ID
+		},
+		viewUrl: {
+			type: String, // Google Drive view URL
+		},
 		previewUrl: {
 			type: String,
 		},
