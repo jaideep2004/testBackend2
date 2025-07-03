@@ -205,14 +205,46 @@ const contentController = {
 				});
 			}
 
-			const fileUrl = req.files["file"] ? req.files["file"][0].path : null;
+			const fileBuffer = req.files["file"] ? req.files["file"][0] : null;
 			const thumbnailUrl = req.files["thumbnail"]
 				? req.files["thumbnail"][0].path
 				: null;
 
-			if (!fileUrl) {
+			if (!fileBuffer) {
 				return res.status(400).json({
 					message: "Main content file is required",
+				});
+			}
+
+			// Import the Google Drive service
+			const { uploadFileToDrive } = require('../utils/driveService');
+			
+			// Upload file to Google Drive
+			let fileUrl, fileId, viewUrl;
+			
+			try {
+				// Determine MIME type based on content type
+				let mimeType = 'application/pdf';
+				if (type === "Video Lectures") {
+					mimeType = 'video/mp4';
+				} else if (type === "MCQs" || type === "PDF Notes" || type === "Previous Year") {
+					mimeType = 'application/pdf';
+				}
+				
+				// Upload the file to Google Drive with the correct MIME type
+				const uploadResult = await uploadFileToDrive(fileBuffer, fileBuffer.originalname, mimeType);
+				
+				// Store both the download URL and file ID
+				fileUrl = uploadResult.downloadUrl;
+				fileId = uploadResult.fileId;
+				viewUrl = uploadResult.viewUrl;
+				
+				console.log('File uploaded to Google Drive successfully:', uploadResult);
+			} catch (driveError) {
+				console.error('Google Drive upload failed:', driveError);
+				return res.status(500).json({
+					message: "Failed to upload file to Google Drive",
+					error: driveError.message
 				});
 			}
 
@@ -224,6 +256,8 @@ const contentController = {
 				classId,
 				semesterId,
 				fileUrl,
+				fileId, // Store Google Drive file ID
+				viewUrl, // Store Google Drive view URL
 				thumbnailUrl,
 				price: Number(price),
 				isFree: isFree === "true",
@@ -326,14 +360,28 @@ const contentController = {
 				return res.status(404).json({ message: "Content not found" });
 			}
 
-			// Delete associated files
-			if (content.fileUrl) {
+			// Import the Google Drive service
+			const { deleteFileFromDrive } = require('../utils/driveService');
+
+			// Delete file from Google Drive if fileId exists
+			if (content.fileId) {
+				try {
+					await deleteFileFromDrive(content.fileId);
+					console.log(`File deleted from Google Drive: ${content.fileId}`);
+				} catch (driveError) {
+					console.error('Failed to delete file from Google Drive:', driveError);
+					// Continue with deletion even if Drive deletion fails
+				}
+			} 
+			// Fallback to local file deletion if no fileId (for backward compatibility)
+			else if (content.fileUrl && !content.fileUrl.includes('drive.google.com')) {
 				const filePath = path.join(__dirname, "..", content.fileUrl);
 				if (fs.existsSync(filePath)) {
 					fs.unlinkSync(filePath);
 				}
 			}
 
+			// Delete local thumbnail if it exists
 			if (content.thumbnailUrl) {
 				const thumbnailPath = path.join(__dirname, "..", content.thumbnailUrl);
 				if (fs.existsSync(thumbnailPath)) {
@@ -365,6 +413,31 @@ const contentController = {
 				return res.status(404).json({ message: "Content not found" });
 			}
 
+			// If content has Google Drive URLs, return the URL instead of redirecting
+			if (content.viewUrl || (content.fileUrl && content.fileUrl.includes('drive.google.com'))) {
+				// Increment view count
+				content.views = (content.views || 0) + 1;
+				await content.save();
+				
+				// Get the Google Drive URL
+				let driveUrl = content.viewUrl || content.fileUrl;
+				
+				// Extract the file ID if it's in the standard Google Drive format
+				const idMatch = driveUrl.match(/[-\w]{25,}/);
+				const fileId = idMatch ? idMatch[0] : null;
+				
+				// For preview, use the /preview endpoint instead of /view
+				if (fileId) {
+					driveUrl = `https://drive.google.com/file/d/${fileId}/preview`;
+				}
+				
+				return res.json({
+					previewUrl: driveUrl,
+					fileType: content.type === "Video Lectures" ? "video" : "pdf"
+				});
+			}
+			
+			// Legacy handling for local files
 			// Get the file path
 			const filePath = path.join(__dirname, "..", content.fileUrl);
 
@@ -421,19 +494,67 @@ const contentController = {
 				return res.status(403).json({ message: "Content not purchased" });
 			}
 
+			// Increment download count
+			content.downloads = (content.downloads || 0) + 1;
+			await content.save();
+
+			// If content has a Google Drive URL, return the URL instead of redirecting
+			if (content.fileUrl && content.fileUrl.includes('drive.google.com')) {
+				// Get file extension based on content type
+				let fileExtension = '.pdf';
+				if (content.type === "Video Lectures") {
+					fileExtension = '.mp4';
+				}
+				
+				// Format the URL for direct download
+				let driveUrl = content.fileUrl;
+				// Extract the file ID if it's in the standard Google Drive format
+				const idMatch = driveUrl.match(/[-\w]{25,}/);
+				const fileId = idMatch ? idMatch[0] : null;
+				
+				if (fileId) {
+					// Use the direct download URL format
+					driveUrl = `https://drive.google.com/uc?id=${fileId}&export=download`;
+				}
+				
+				return res.json({
+					directUrl: driveUrl,
+					fileName: content.title + fileExtension,
+					fileType: content.type
+				});
+			}
+
+			// Legacy handling for local files
 			const filePath = path.join(__dirname, "..", content.fileUrl);
 
 			if (!fs.existsSync(filePath)) {
 				return res.status(404).json({ message: "File not found" });
 			}
 
+			// Determine content type based on file extension or content type
+			const ext = path.extname(filePath).toLowerCase();
+			let contentType = "application/octet-stream";
+			
+			// Set appropriate content type based on file extension or content.type
+			if (ext === '.pdf' || content.type === "PDF Notes" || content.type === "Previous Year") {
+				contentType = "application/pdf";
+			} else if (ext === '.mp4' || content.type === "Video Lectures") {
+				contentType = "video/mp4";
+			} else if (ext === '.jpg' || ext === '.jpeg') {
+				contentType = "image/jpeg";
+			} else if (ext === '.png') {
+				contentType = "image/png";
+			}
+
 			// Set download headers
 			const filename = path.basename(content.fileUrl);
+			const safeFilename = content.title.replace(/[^a-zA-Z0-9._-]/g, '_') + ext;
+			
 			res.setHeader(
 				"Content-Disposition",
-				`attachment; filename="${filename}"`
+				`attachment; filename="${safeFilename}"`
 			);
-			res.setHeader("Content-Type", "application/octet-stream");
+			res.setHeader("Content-Type", contentType);
 
 			// Stream the file
 			const stream = fs.createReadStream(filePath);

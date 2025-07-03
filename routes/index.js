@@ -43,7 +43,7 @@ router.post(
 router.post(
 	"/admin/classes",
 	protect,
-	admin,
+	admin, 
 	upload.single("image"),
 	adminController.addClass
 );
@@ -120,6 +120,14 @@ router.post(
 router.get("/projects", projectController.getProjects);
 router.get("/projects/:id", projectController.getProjectById);
 
+router.get("/content/:id/preview", contentController.previewContent);
+router.get(
+	"/content/:id/download",
+	protect,
+	contentController.downloadContent
+);
+
+// Keep old routes for backward compatibility
 router.get("/customer/preview/:id", contentController.previewContent);
 router.get(
 	"/customer/download/:id",
