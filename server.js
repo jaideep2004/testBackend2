@@ -20,7 +20,7 @@ app.use(cors({
   origin: ['http://localhost:5173', 'https://drive.google.com','https://academicassignmentmaster.co.in'],
   credentials: true,
   exposedHeaders: ['Content-Disposition']
-}));
+})); 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
@@ -29,7 +29,7 @@ app.use((req, res, next) => {
 }); 
 // Serve uploaded files
 app.get("/", (req, res) => {
-	res.send("TEST BACKEND 3 july");
+	res.send("TEST BACKEND 4 july");
 });
 app.use( 
 	(req, res, next) => {
