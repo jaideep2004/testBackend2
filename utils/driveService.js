@@ -3,20 +3,17 @@
  */
 
 const { google } = require('googleapis');
-// Google service account credentials directly embedded
-const googleCredentials = {
-  type: "service_account",
-  project_id: "testseries-464711",
-  private_key_id: "c051dfffeb99f7155d8ab8170a845becc1dd6886",
-  private_key: `-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCY0u+4APNA7t1r\no2Vg2DcxJIWS6ci/6mIlk5Hf8IKgQ/iLYWFo7Z3BYeW2u7g+y+qW/H/6lfp5dfi8\ndYzoWN1zaJIyflQ9NXGaQmE/aJ27/QUW+nyeuHzPNhGVwwJwqvk+qbtenhMKMLqS\ngQqr3UaKtibCGOY6aV0oB9R8fFKXHrpp2avisRU0+JzTZ274jdSC9x/HhquwMe3N\n3FkJB79gJ3+Na0xw+Y6Deaogjt+lQ/jBvO7tbchuz9BnWteTCCnax9rNrYo0dbae\n7naTHEO7BV45TgSzyEmWSx8QFMlYbC4GEP6B4GDmUS3caCkMCYaBxQvF7Oi4kMM7\nN1sabmAvAgMBAAECggEAAjktjfPWM7CjfbmiTFR49MewZc0ow621qEut3FFYwrP8\n6chbcg6ptDLFkfEW56m/WoLVwr11imw4Q/UHFdqW92zx0HvwVLq3Kng2c6y2CnTO\nccP77nc3ktx70rQJEDTfCgvO4fchswMZtQLdSqZZQE39V3DL6UtVIRYKOvjLwUUQ\nGs3JWiXzcOlhaBeMMdxBFTJc+JjnNL5euc7XhcrhX13Qifau+KPep2V1qPmDbHkw\nQO3SfNly4dMoeRC25B86pzT6UumdHn05mXiGuWgLgb/UByLdvBAhfFp8v7mkpebG\noema6XDImz7O2G+A7IzGEzIY+xJS+Oo5zJCWlnhSQQKBgQDQvsqOkgTFAGB5FWwo\neeiWq/YzT2MOATeprXlTd73LNTTph/PSXGaJMf0iFDG7q91tLivDrxQJ9r/9LeUD\nvQk+/EWvIHZRhDrgXln2b73R6BiN/CijHBaws8il0PePNbHsL3EiDmVrzr/6q0e3\n1PyUydi0K5EHwDT7yEzMF3DXTwKBgQC7a2ST/Kfrze6yD/ev8fUP2O22U5MtTKgq\nl6HX8FoaEAb0gjdNpoNjxyO6GVmAds81MVGWwCIs9CMePWqvsecKWhhC9j4XLnRF\naI1X5w+NCdshxImV2CCgqkG9Hmrtt1GguLdkLG5zDMcvORZ+ddCndOsThmNCzbJ6\nA2L9TmuxIQKBgEUNB9Y3iSpdoIwNQRT2lrDYu31nol2sm2wefUbWEktZE2K43TfV\n5vk1NwYB5h2tkXafUkzN6nQNUp7+goZFDvzt2GNA+sKmWg+ERoAVoJYCD7VQF2U1\nUnArWJE5WdreqTd2zha06mnKH4ldBUFTTCYvyuZ2juggdaZgML9GdcZTAoGBAKzf\n84c5nx639nvSlLJ7aYOzohjy4CgBtICNG2EWt9WggPnafu6mMD3B+2d2aINBlAHJ\nuytlkGCM1TPYjOcBH08CKazifAVf+Snota+mV0bOF43/PrW0BOyN/1NVkmYxGR86\nIxdIkJyY5cXeT6xYOh2skAWTiU2edQlsxEtIobdhAoGAHEu9ipJ1k7+Qkb7HRH95\nMA7HwszBaW68qw9HeHfCpimtMFsZgE9h9kTWhnfk5SqRvEueDeGCyXNZrXwaNgbD\nRlcyqkwBhn5EoSanvVyFJCPvNYJ1SYQowGXuIwKMGVgzDwQyRlgI+lHO11+wTfS1\n3LNRArH2twhC31SfMnlE0rY=\n-----END PRIVATE KEY-----\n`,
-  client_email: "pdf-storage@testseries-464711.iam.gserviceaccount.com",
-  client_id: "116304378515215682716",
-  auth_uri: "https://accounts.google.com/o/oauth2/auth",
-  token_uri: "https://oauth2.googleapis.com/token",
-  auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
-  client_x509_cert_url: "https://www.googleapis.com/robot/v1/metadata/x509/pdf-storage%40testseries-464711.iam.gserviceaccount.com",
-  universe_domain: "googleapis.com"
-};
+// Google service account credentials loaded from environment variable
+let googleCredentials = null;
+try {
+  if (!process.env.GOOGLE_CREDENTIALS) {
+    throw new Error('GOOGLE_CREDENTIALS environment variable not set.');
+  }
+  googleCredentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+} catch (err) {
+  console.error('Failed to load or parse GOOGLE_CREDENTIALS env variable:', err.message);
+  throw new Error('Google credentials are missing or malformed.');
+}
 
 // Google Drive folder ID where files will be stored
 // Replace with your actual folder ID copied from Google Drive
