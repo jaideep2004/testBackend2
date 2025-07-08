@@ -109,12 +109,27 @@ const uploadFileToDrive = async (fileBuffer, filename, mimeType = null) => {
       body: bodyStream
     };
 
-    // Upload file
-    const response = await drive.files.create({
-      resource: fileMetadata,
-      media: media,
-      fields: 'id,name,webViewLink,mimeType'
-    });
+    // Upload file with error handling
+    let response;
+    try {
+      console.log('Attempting to upload file to Google Drive...');
+      response = await drive.files.create({
+        resource: fileMetadata,
+        media: media,
+        fields: 'id,name,webViewLink,mimeType',
+        supportsAllDrives: true,  // Important for shared drives
+        supportsTeamDrives: true  // For backward compatibility
+      });
+      console.log('Upload successful, file ID:', response.data.id);
+    } catch (uploadError) {
+      console.error('Upload failed with error:', {
+        message: uploadError.message,
+        code: uploadError.code,
+        errors: uploadError.errors,
+        response: uploadError.response?.data
+      });
+      throw uploadError;
+    }
 
     console.log('File uploaded to Google Drive:', response.data);
 
@@ -152,8 +167,14 @@ const uploadFileToDrive = async (fileBuffer, filename, mimeType = null) => {
       mimeType: fileInfo.data.mimeType || mimeType
     };
   } catch (error) {
-    console.error('Error uploading file to Google Drive:', error);
-    throw new Error('Failed to upload file to Google Drive');
+    console.error('Detailed error uploading to Google Drive:', {
+      message: error.message,
+      code: error.code,
+      errors: error.errors,
+      response: error.response?.data,
+      stack: error.stack
+    });
+    throw new Error(`Failed to upload file to Google Drive: ${error.message}`);
   }
 };
 
