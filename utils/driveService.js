@@ -3,15 +3,26 @@
  */
 
 const { google } = require('googleapis');
-// Google service account credentials loaded from environment variable
+const path = require('path');
+const fs = require('fs');
+require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+
+// Google service account credentials loaded from .env
 let googleCredentials = null;
 try {
-  if (!process.env.GOOGLE_CREDENTIALS) {
-    throw new Error('GOOGLE_CREDENTIALS environment variable not set.');
+  // First try to load from GOOGLE_CREDENTIALS_JSON string
+  if (process.env.GOOGLE_CREDENTIALS) {
+    googleCredentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+  } 
+  // Fallback to credentials file path
+  else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    const credsPath = path.resolve(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+    googleCredentials = require(credsPath);
+  } else {
+    throw new Error('Neither GOOGLE_CREDENTIALS nor GOOGLE_APPLICATION_CREDENTIALS is set in .env');
   }
-  googleCredentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
 } catch (err) {
-  console.error('Failed to load or parse GOOGLE_CREDENTIALS env variable:', err.message);
+  console.error('Failed to load Google credentials:', err.message);
   throw new Error('Google credentials are missing or malformed.');
 }
 
@@ -22,14 +33,21 @@ const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || '1FfFhEOImZMkLm2qWiSgfmF
 // Initialize the Google Drive API client
 const initializeDrive = () => {
   try {
+    console.log('Initializing Google Drive with service account:', googleCredentials.client_email);
+    console.log('Using folder ID:', FOLDER_ID);
+    
     const auth = new google.auth.GoogleAuth({
       credentials: googleCredentials,
-      scopes: ['https://www.googleapis.com/auth/drive']
+      scopes: [
+        'https://www.googleapis.com/auth/drive.file',
+        'https://www.googleapis.com/auth/drive.appdata'
+      ]
     });
+    
     return google.drive({ version: 'v3', auth });
   } catch (error) {
     console.error('Failed to initialize Google Drive client:', error);
-    return null;
+    throw error;
   }
 };
 
@@ -65,11 +83,13 @@ const uploadFileToDrive = async (fileBuffer, filename, mimeType = null) => {
       }
     }
 
-    // Create file metadata
+    // Create file metadata with the shared folder as parent
     const fileMetadata = {
       name: `${Date.now()}-${filename}`, // Add timestamp to avoid name conflicts
       parents: [FOLDER_ID]
     };
+    
+    console.log('Uploading file with metadata:', JSON.stringify(fileMetadata, null, 2));
 
     // Create media object
     let bodyStream;
