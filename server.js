@@ -1,4 +1,3 @@
-//server.js  live
 require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
@@ -10,10 +9,29 @@ const connectDB = require("./config/db");
 const app = express();
 const https = require("https");
 const fs = require("fs");
+const session = require('express-session');
+const { OAuth2Client } = require('google-auth-library');
 
-// Connect to MongoDB
-// // Connect to database
+// Connect to database 
 connectDB();
+
+// Session configuration
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your-session-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { 
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+
+// Initialize OAuth2 client
+const oauth2Client = new OAuth2Client(
+  process.env.GOOGLE_OAUTH_CLIENT_ID,
+  process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+  process.env.GOOGLE_OAUTH_REDIRECT_URI
+);
 
 // Middleware
 app.use(cors({
@@ -68,16 +86,55 @@ app.use((req, res) => {
 	res.status(404).json({ message: "Route not found" });
 });
 
+// Auth routes
+app.get('/auth/google', (req, res) => {
+  const url = oauth2Client.generateAuthUrl({
+    access_type: 'offline',
+    scope: ['https://www.googleapis.com/auth/drive.file'],
+    prompt: 'consent'
+  });
+  res.redirect(url);
+});
 
+app.get('/auth/google/callback', async (req, res) => {
+  try {
+    const { code } = req.query;
+    const { tokens } = await oauth2Client.getToken(code);
+    
+    // Store tokens in session
+    req.session.tokens = tokens;
+    
+    // Store in drive service
+    const driveService = require('./utils/driveService');
+    driveService.setTokens(tokens);
+    
+    res.redirect('/');
+  } catch (error) {
+    console.error('Error during OAuth callback:', error);
+    res.status(500).send('Authentication failed');
+  }
+});
+
+// Check auth status
+app.get('/api/check-auth', (req, res) => {
+  if (req.session.tokens) {
+    res.json({ authenticated: true });
+  } else {
+    res.status(401).json({ authenticated: false });
+  }
+});
+
+// Start server
 
 const PORT = process.env.PORT || 7000;
 
-
 // app.listen(PORT, () => {
-// 	console.log(`Server running on port ${PORT}`);
+//   console.log(`Server running on port ${PORT}`);
 // });
 
 
+
+//live vps
 const options = {
 	key: fs.readFileSync(path.join(__dirname, "certs/privkey.pem")),
 	cert: fs.readFileSync(path.join(__dirname, "certs/fullchain.pem")),
@@ -85,4 +142,3 @@ const options = {
 https.createServer(options, app).listen(PORT, () => {
 	console.log(`Server running on port ${PORT} (HTTPS)`);
 });
-
