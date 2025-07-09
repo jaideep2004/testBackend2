@@ -205,12 +205,29 @@ const contentController = {
 				});
 			}
 
-			const fileBuffer = req.files["file"] ? req.files["file"][0] : null;
+			const fileObj = req.files["file"] ? req.files["file"][0] : null;
 			const thumbnailUrl = req.files["thumbnail"]
 				? req.files["thumbnail"][0].path
 				: null;
 
-			if (!fileBuffer) {
+			// Determine fileBuffer to use for Google Drive upload
+			let fileBufferForDrive;
+			const fs = require('fs');
+			if (fileObj) {
+				if (fileObj.buffer) {
+					// Multer memory storage
+					fileBufferForDrive = fileObj.buffer;
+				} else if (fileObj.path) {
+					// Multer disk storage
+					fileBufferForDrive = fs.createReadStream(fileObj.path);
+				} else {
+					fileBufferForDrive = null;
+				}
+			} else {
+				fileBufferForDrive = null;
+			}
+
+			if (!fileObj) {
 				return res.status(400).json({
 					message: "Main content file is required",
 				});
@@ -232,7 +249,7 @@ const contentController = {
 				}
 				
 				// Upload the file to Google Drive with the correct MIME type
-				const uploadResult = await uploadFileToDrive(fileBuffer, fileBuffer.originalname, mimeType);
+				const uploadResult = await uploadFileToDrive(fileBufferForDrive, fileObj.originalname, mimeType);
 				
 				// Store both the download URL and file ID
 				fileUrl = uploadResult.downloadUrl;
