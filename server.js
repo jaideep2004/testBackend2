@@ -136,9 +136,14 @@ const PORT = process.env.PORT || 7000;
 
 //live vps
 const options = {
-	key: fs.readFileSync(path.join(__dirname, "certs/privkey.pem")),
-	cert: fs.readFileSync(path.join(__dirname, "certs/fullchain.pem")),
-}; 
+	key: fs.readFileSync(
+		"/etc/letsencrypt/live/195-35-45-82.sslip.io/privkey.pem"
+	),
+	cert: fs.readFileSync(
+		"/etc/letsencrypt/live/195-35-45-82.sslip.io/fullchain.pem"
+	),
+};
+
 https.createServer(options, app).listen(PORT, () => {
 	console.log(`Server running on port ${PORT} (HTTPS)`);
 });
