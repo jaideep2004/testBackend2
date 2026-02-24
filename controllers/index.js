@@ -22,7 +22,7 @@ const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const razorpay = new Razorpay({
 	key_id: process.env.RAZORPAY_KEY_ID,
-	key_secret: process.env.RAZORPAY_SECRET,
+	key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
 // Auth Controller Functions
@@ -206,9 +206,33 @@ const contentController = {
 			}
 
 			const fileObj = req.files["file"] ? req.files["file"][0] : null;
-			const thumbnailUrl = req.files["thumbnail"]
-				? req.files["thumbnail"][0].path
-				: null;
+			
+			// Handle thumbnail - save to disk if it came from memory storage
+			let thumbnailUrl = null;
+			if (req.files["thumbnail"] && req.files["thumbnail"][0]) {
+				const thumbnailFile = req.files["thumbnail"][0];
+				if (thumbnailFile.buffer) {
+					// Thumbnail came from memory storage, save to disk
+					const fs = require('fs');
+					const path = require('path');
+					
+					// Create uploads/thumbnails directory if it doesn't exist
+					const uploadDir = 'uploads/thumbnails';
+					fs.mkdirSync(uploadDir, { recursive: true });
+					
+					// Generate unique filename
+					const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+					const fileName = `thumbnail-${uniqueSuffix}${path.extname(thumbnailFile.originalname)}`;
+					const filePath = path.join(uploadDir, fileName);
+					
+					// Write thumbnail to disk
+					fs.writeFileSync(filePath, thumbnailFile.buffer);
+					thumbnailUrl = filePath;
+				} else {
+					// Thumbnail came from disk storage
+					thumbnailUrl = thumbnailFile.path;
+				}
+			}
 
 			// Determine fileBuffer to use for Google Drive upload
 			let fileBufferForDrive;
@@ -218,8 +242,10 @@ const contentController = {
 					// Multer memory storage
 					fileBufferForDrive = fileObj.buffer;
 				} else if (fileObj.path) {
-					// Multer disk storage
-					fileBufferForDrive = fs.createReadStream(fileObj.path);
+					// Multer disk storage - read the file into buffer
+					fileBufferForDrive = fs.readFileSync(fileObj.path);
+					// Delete the local file after reading into buffer
+					fs.unlinkSync(fileObj.path);
 				} else {
 					fileBufferForDrive = null;
 				}
@@ -252,9 +278,9 @@ const contentController = {
 				const uploadResult = await uploadFileToDrive(fileBufferForDrive, fileObj.originalname, mimeType);
 				
 				// Store both the download URL and file ID
-				fileUrl = uploadResult.downloadUrl;
-				fileId = uploadResult.fileId;
-				viewUrl = uploadResult.viewUrl;
+				fileUrl = uploadResult.url;
+				fileId = uploadResult.id;
+				viewUrl = uploadResult.downloadUrl;
 				
 				console.log('File uploaded to Google Drive successfully:', uploadResult);
 			} catch (driveError) {
@@ -1234,8 +1260,6 @@ const adminController = {
 const projectController = {
 	uploadProject: async (req, res) => {
 		try {
-			console.log("Uploaded Files:", req.files);
-			console.log("Project File:", req.files["file"]);
 			const {
 				title,
 				description,
@@ -1248,14 +1272,95 @@ const projectController = {
 				tags,
 			} = req.body;
 
-			// Fix the file path access
-			const fileUrl = req.files["file"] ? req.files["file"][0].path : null;
-			const thumbnailUrl = req.files["thumbnail"]
-				? req.files["thumbnail"][0].path
-				: null;
+			const fileObj = req.files["file"] ? req.files["file"][0] : null;
+			
+			// Handle thumbnail - save to disk if it came from memory storage
+			let thumbnailUrl = null;
+			if (req.files["thumbnail"] && req.files["thumbnail"][0]) {
+				const thumbnailFile = req.files["thumbnail"][0];
+				if (thumbnailFile.buffer) {
+					// Thumbnail came from memory storage, save to disk
+					const fs = require('fs');
+					const path = require('path');
+					
+					// Create uploads/thumbnails directory if it doesn't exist
+					const uploadDir = 'uploads/thumbnails';
+					fs.mkdirSync(uploadDir, { recursive: true });
+					
+					// Generate unique filename
+					const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+					const fileName = `thumbnail-${uniqueSuffix}${path.extname(thumbnailFile.originalname)}`;
+					const filePath = path.join(uploadDir, fileName);
+					
+					// Write thumbnail to disk
+					fs.writeFileSync(filePath, thumbnailFile.buffer);
+					thumbnailUrl = filePath;
+				} else {
+					// Thumbnail came from disk storage
+					thumbnailUrl = thumbnailFile.path;
+				}
+			}
 
-			if (!fileUrl) {
+			if (!fileObj) {
 				return res.status(400).json({ message: "Project file is required" });
+			}
+
+			// Determine fileBuffer to use for Google Drive upload
+			let fileBufferForDrive;
+			const fs = require('fs');
+			if (fileObj) {
+				if (fileObj.buffer) {
+					// Multer memory storage
+					fileBufferForDrive = fileObj.buffer;
+				} else if (fileObj.path) {
+					// Multer disk storage - read the file into buffer
+					fileBufferForDrive = fs.readFileSync(fileObj.path);
+					// Delete the local file after reading into buffer
+					fs.unlinkSync(fileObj.path);
+				} else {
+					fileBufferForDrive = null;
+				}
+			} else {
+				fileBufferForDrive = null;
+			}
+
+			// Import the Google Drive service
+			const { uploadFileToDrive } = require('../utils/driveService');
+			
+			// Upload file to Google Drive
+			let fileUrl, fileId, viewUrl;
+			
+			try {
+				// Determine MIME type based on file extension
+				const ext = fileObj.originalname.split('.').pop().toLowerCase();
+				const mimeTypeMap = {
+					'pdf': 'application/pdf',
+					'doc': 'application/msword',
+					'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+					'zip': 'application/zip',
+					'rar': 'application/vnd.rar',
+					'txt': 'text/plain',
+					'jpg': 'image/jpeg',
+					'jpeg': 'image/jpeg',
+					'png': 'image/png',
+				};
+				const mimeType = mimeTypeMap[ext] || 'application/octet-stream';
+				
+				// Upload the file to Google Drive with the correct MIME type
+				const uploadResult = await uploadFileToDrive(fileBufferForDrive, fileObj.originalname, mimeType);
+				
+				// Store both the download URL and file ID
+				fileUrl = uploadResult.url;
+				fileId = uploadResult.id;
+				viewUrl = uploadResult.downloadUrl;
+				
+				console.log('Project file uploaded to Google Drive successfully:', uploadResult);
+			} catch (driveError) {
+				console.error('Google Drive project upload failed:', driveError);
+				return res.status(500).json({
+					message: "Failed to upload project file to Google Drive",
+					error: driveError.message
+				});
 			}
 
 			const project = await Project.create({
@@ -1264,6 +1369,8 @@ const projectController = {
 				subjectId,
 				classId,
 				fileUrl,
+				fileId, // Store Google Drive file ID
+				viewUrl, // Store Google Drive view URL
 				thumbnailUrl,
 				price: Number(price),
 				isFree: isFree === "true",
@@ -1274,6 +1381,7 @@ const projectController = {
 
 			res.status(201).json(project);
 		} catch (error) {
+			console.error("Project upload error:", error);
 			res
 				.status(500)
 				.json({ message: "Project upload failed", error: error.message });
@@ -1371,6 +1479,33 @@ const projectController = {
 				return res.status(403).json({ message: "Project not purchased" });
 			}
 
+			// Increment download count
+			project.downloads = (project.downloads || 0) + 1;
+			await project.save();
+
+			// If project has a Google Drive URL, return the URL instead of redirecting
+			if (project.fileUrl && project.fileUrl.includes('drive.google.com')) {
+				// Get file extension based on file type
+				let fileExtension = '.zip';
+				
+				// Format the URL for direct download
+				let driveUrl = project.fileUrl;
+				// Extract the file ID if it's in the standard Google Drive format
+				const idMatch = driveUrl.match(/[-\w]{25,}/);
+				const fileId = idMatch ? idMatch[0] : null;
+				
+				if (fileId) {
+					// Use the direct download URL format
+					driveUrl = `https://drive.google.com/uc?id=${fileId}&export=download`;
+				}
+				
+				return res.json({
+					directUrl: driveUrl,
+					fileName: project.title + fileExtension,
+				});
+			}
+
+			// Legacy handling for local files
 			const filePath = path.join(__dirname, "..", project.fileUrl);
 
 			if (!fs.existsSync(filePath)) {
@@ -1379,9 +1514,11 @@ const projectController = {
 
 			// Set download headers
 			const filename = path.basename(project.fileUrl);
+			const safeFilename = project.title.replace(/[^a-zA-Z0-9._-]/g, '_') + path.extname(filename);
+				
 			res.setHeader(
 				"Content-Disposition",
-				`attachment; filename="${filename}"`
+				`attachment; filename="${safeFilename}"`
 			);
 			res.setHeader("Content-Type", "application/octet-stream");
 
@@ -1404,27 +1541,37 @@ const projectController = {
 				});
 			}
 
-			// Delete associated files if they exist
-			const filesToDelete = [
-				project.fileUrl, // Main project file
-				project.thumbnailUrl, // Thumbnail image
-			].filter(Boolean); // Remove any null/undefined values
+			// Import the Google Drive service
+			const { deleteFileFromDrive } = require('../utils/driveService');
 
-			// Delete files from storage
-			for (const filePath of filesToDelete) {
-				const fullPath = path.join(__dirname, "..", filePath);
-				if (fs.existsSync(fullPath)) {
-					try {
-						fs.unlinkSync(fullPath);
-					} catch (err) {
-						console.error(`Error deleting file ${fullPath}:`, err);
-						// Continue with deletion even if file removal fails
-					}
+			// Delete file from Google Drive if fileId exists
+			if (project.fileId) {
+				try {
+					await deleteFileFromDrive(project.fileId);
+					console.log(`Project file deleted from Google Drive: ${project.fileId}`);
+				} catch (driveError) {
+					console.error('Failed to delete project file from Google Drive:', driveError);
+					// Continue with deletion even if Drive deletion fails
+				}
+			} 
+			// Fallback to local file deletion if no fileId (for backward compatibility)
+			else if (project.fileUrl && !project.fileUrl.includes('drive.google.com')) {
+				const filePath = path.join(__dirname, "..", project.fileUrl);
+				if (fs.existsSync(filePath)) {
+					fs.unlinkSync(filePath);
+				}
+			}
+
+			// Delete local thumbnail if it exists
+			if (project.thumbnailUrl) {
+				const thumbnailPath = path.join(__dirname, "..", project.thumbnailUrl);
+				if (fs.existsSync(thumbnailPath)) {
+					fs.unlinkSync(thumbnailPath);
 				}
 			}
 
 			// Delete project from database
-			await Project.findByIdAndDelete(req.params.id);
+			await project.deleteOne();
 
 			res.status(200).json({
 				success: true,

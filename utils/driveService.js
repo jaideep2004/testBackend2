@@ -1,5 +1,6 @@
 const { google } = require('googleapis');
 const { OAuth2Client } = require('google-auth-library');
+const { Readable } = require('stream');
 
 let oauth2Client = null;
 let drive = null;
@@ -47,6 +48,9 @@ const uploadFileToDrive = async (fileBuffer, filename, mimeType = 'application/o
       }[ext] || 'application/octet-stream';
     }
 
+    // Convert Buffer to Readable stream for Google Drive API
+    const bufferStream = Readable.from(fileBuffer);
+    
     // Upload file
     const response = await drive.files.create({
       requestBody: {
@@ -56,7 +60,7 @@ const uploadFileToDrive = async (fileBuffer, filename, mimeType = 'application/o
       },
       media: {
         mimeType,
-        body: fileBuffer
+        body: bufferStream
       },
       fields: 'id,name,webViewLink,webContentLink',
       supportsAllDrives: true
@@ -117,8 +121,8 @@ if (process.env.GOOGLE_REFRESH_TOKEN) {
 }
 
 module.exports = {
-  drive,
-  setTokens,
+  drive, 
+  setTokens, 
   uploadFileToDrive,
   deleteFileFromDrive
 };

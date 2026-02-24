@@ -27,6 +27,6 @@ rl.question('Enter the code from that page here: ', (code) => {
   oauth2Client.getToken(code, (err, token) => {
     if (err) return console.error('Error retrieving access token', err);
     console.log('Your tokens:', token);
-    rl.close();
+    rl.close();   
   });
 });

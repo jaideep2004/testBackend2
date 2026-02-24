@@ -107,8 +107,19 @@ const fileFilter = (req, file, cb) => {
 	}
 };
 
+// Disk storage for general uploads
 const upload = multer({
 	storage: storage,
+	fileFilter: fileFilter,
+	limits: {
+		fileSize: 1000 * 1024 * 1024, // 100MB max file size
+	},
+});
+
+// Memory storage for Google Drive uploads (to avoid saving locally first)
+const memoryStorage = multer.memoryStorage();
+const uploadToDrive = multer({
+	storage: memoryStorage,
 	fileFilter: fileFilter,
 	limits: {
 		fileSize: 1000 * 1024 * 1024, // 100MB max file size
@@ -128,5 +139,6 @@ module.exports = {
 	protect,
 	admin,
 	upload,
+	uploadToDrive,
 	errorHandler,
 };

@@ -1,6 +1,6 @@
 // routes/index.js
 const express = require("express");
-const { protect, admin, upload } = require("../middleware");
+const { protect, admin, upload, uploadToDrive } = require("../middleware");
 const { Content, User } = require("../models");
 const path = require("path");
 const fs = require("fs");
@@ -86,7 +86,7 @@ router.post(
 	"/content",
 	protect,
 	admin,
-	upload.fields([
+	uploadToDrive.fields([
 		{ name: "file", maxCount: 1 },
 		{ name: "thumbnail", maxCount: 1 },
 	]),
@@ -110,7 +110,7 @@ router.post(
 	"/projects",
 	protect,
 	admin,
-	upload.fields([
+	uploadToDrive.fields([
 		{ name: "file", maxCount: 1 },
 		{ name: "thumbnail", maxCount: 1 },
 	]),
