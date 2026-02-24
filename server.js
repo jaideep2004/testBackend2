@@ -128,22 +128,22 @@ app.get('/api/check-auth', (req, res) => {
 
 const PORT = process.env.PORT || 7000;
 
-// app.listen(PORT, () => {
-//   console.log(`Server running on port ${PORT}`);
-// });
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
 
 
 
 //live vps
-const options = {
-	key: fs.readFileSync(
-		"/etc/letsencrypt/live/195-35-45-82.sslip.io/privkey.pem"
-	),
-	cert: fs.readFileSync(
-		"/etc/letsencrypt/live/195-35-45-82.sslip.io/fullchain.pem"
-	),
-};
+// const options = {
+// 	key: fs.readFileSync(
+// 		"/etc/letsencrypt/live/195-35-45-82.sslip.io/privkey.pem"
+// 	),
+// 	cert: fs.readFileSync(
+// 		"/etc/letsencrypt/live/195-35-45-82.sslip.io/fullchain.pem"
+// 	),
+// };
 
-https.createServer(options, app).listen(PORT, () => {
-	console.log(`Server running on port ${PORT} (HTTPS)`);
-});
+// https.createServer(options, app).listen(PORT, () => {
+// 	console.log(`Server running on port ${PORT} (HTTPS)`);
+// });
